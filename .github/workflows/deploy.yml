@@ -130,7 +130,7 @@ jobs:
           node-version: "22"
 
       - name: Install Serverless Framework
-        run: npm install -g serverless@4
+        run: npm install -g serverless@3
 
       - name: Deploy
         run: serverless deploy --stage ${{ env.STAGE }} --verbose
