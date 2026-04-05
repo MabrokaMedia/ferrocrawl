@@ -140,7 +140,8 @@ jobs:
       - name: Get API URL
         id: api-url
         run: |
-          URL=$(serverless info --stage ${{ env.STAGE }} --verbose 2>&1 | grep -oP 'https://[^\s]+' | head -1)
+          RAW=$(serverless info --stage ${{ env.STAGE }} --verbose 2>&1 | grep -oP 'https://[^\s]+\.amazonaws\.com' | head -1)
+          URL="${RAW%/}"
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "API URL: $URL"
 
