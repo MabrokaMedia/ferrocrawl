@@ -80,10 +80,12 @@ jobs:
       - name: Build Lambda binary (ARM64)
         run: cargo lambda build --release --arm64 --bin ferrocrawl
 
-      - name: Verify binary exists
+      - name: Package Lambda artifact
         run: |
           ls -la target/lambda/ferrocrawl/bootstrap
           file target/lambda/ferrocrawl/bootstrap
+          cd target/lambda/ferrocrawl && zip bootstrap.zip bootstrap
+          ls -la bootstrap.zip
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
