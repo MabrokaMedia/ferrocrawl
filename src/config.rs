@@ -179,9 +179,7 @@ mod tests {
 
     #[test]
     fn auth_disabled_without_keys() {
-        let auth = AuthConfig {
-            api_keys: vec![],
-        };
+        let auth = AuthConfig { api_keys: vec![] };
         assert!(!auth.enabled());
     }
 

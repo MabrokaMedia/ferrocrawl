@@ -13,14 +13,34 @@ impl ContentCleaner {
         let document = Html::parse_document(raw_html);
 
         let selectors_to_remove = [
-            "script", "style", "noscript", "iframe", "svg",
-            "nav", "footer", "header",
-            "[role='navigation']", "[role='banner']", "[role='contentinfo']",
-            ".nav", ".navbar", ".footer", ".header", ".sidebar", ".menu",
-            ".ad", ".ads", ".advertisement",
-            ".cookie-banner", ".cookie-consent", ".popup", ".modal",
-            "#cookie-banner", "#cookie-consent",
-            "[data-ad]", "[data-advertisement]",
+            "script",
+            "style",
+            "noscript",
+            "iframe",
+            "svg",
+            "nav",
+            "footer",
+            "header",
+            "[role='navigation']",
+            "[role='banner']",
+            "[role='contentinfo']",
+            ".nav",
+            ".navbar",
+            ".footer",
+            ".header",
+            ".sidebar",
+            ".menu",
+            ".ad",
+            ".ads",
+            ".advertisement",
+            ".cookie-banner",
+            ".cookie-consent",
+            ".popup",
+            ".modal",
+            "#cookie-banner",
+            "#cookie-consent",
+            "[data-ad]",
+            "[data-advertisement]",
         ];
 
         let mut excluded: HashSet<NodeId> = HashSet::new();
@@ -42,11 +62,7 @@ impl ContentCleaner {
         }
     }
 
-    fn collect_text(
-        node: &scraper::ElementRef,
-        excluded: &HashSet<NodeId>,
-        output: &mut String,
-    ) {
+    fn collect_text(node: &scraper::ElementRef, excluded: &HashSet<NodeId>, output: &mut String) {
         for child in node.children() {
             if let Some(el) = scraper::ElementRef::wrap(child) {
                 if excluded.contains(&el.id()) {
@@ -82,10 +98,8 @@ impl ContentCleaner {
         let title = Self::select_text(&document, "title")
             .or_else(|| Self::select_attr(&document, "meta[property='og:title']", "content"));
 
-        let description =
-            Self::select_attr(&document, "meta[name='description']", "content").or_else(|| {
-                Self::select_attr(&document, "meta[property='og:description']", "content")
-            });
+        let description = Self::select_attr(&document, "meta[name='description']", "content")
+            .or_else(|| Self::select_attr(&document, "meta[property='og:description']", "content"));
 
         let language = Self::select_attr(&document, "html", "lang");
         let og_image = Self::select_attr(&document, "meta[property='og:image']", "content");
@@ -262,7 +276,10 @@ mod tests {
             <meta property="og:image" content="https://example.com/img.png" />
         </head><body></body></html>"#;
         let meta = ContentCleaner::extract_metadata(html);
-        assert_eq!(meta.og_image.as_deref(), Some("https://example.com/img.png"));
+        assert_eq!(
+            meta.og_image.as_deref(),
+            Some("https://example.com/img.png")
+        );
     }
 
     #[test]
@@ -271,7 +288,10 @@ mod tests {
             <link rel="canonical" href="https://example.com/page" />
         </head><body></body></html>"#;
         let meta = ContentCleaner::extract_metadata(html);
-        assert_eq!(meta.canonical_url.as_deref(), Some("https://example.com/page"));
+        assert_eq!(
+            meta.canonical_url.as_deref(),
+            Some("https://example.com/page")
+        );
     }
 
     #[test]

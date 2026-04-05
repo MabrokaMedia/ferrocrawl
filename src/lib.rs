@@ -74,10 +74,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn security_headers(
-    request: axum::extract::Request,
-    next: Next,
-) -> Response {
+async fn security_headers(request: axum::extract::Request, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 
@@ -89,10 +86,7 @@ async fn security_headers(
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),
     );
-    headers.insert(
-        "x-frame-options",
-        HeaderValue::from_static("DENY"),
-    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
 
     response
 }

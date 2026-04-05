@@ -32,7 +32,10 @@ pub async fn scrape_url(
     }
 
     let include_raw = payload.include_raw_html
-        || payload.formats.iter().any(|f| f == "rawHtml" || f == "html");
+        || payload
+            .formats
+            .iter()
+            .any(|f| f == "rawHtml" || f == "html");
 
     let result = state.scraper.scrape(&payload.url, include_raw).await?;
 

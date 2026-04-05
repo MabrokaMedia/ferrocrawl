@@ -55,10 +55,7 @@ impl LlmExtractor {
         schema: Option<&Value>,
         prompt: Option<&str>,
     ) -> Result<Value, AppError> {
-        let api_key = self
-            .api_key
-            .as_ref()
-            .ok_or(AppError::LlmNotConfigured)?;
+        let api_key = self.api_key.as_ref().ok_or(AppError::LlmNotConfigured)?;
 
         let system_prompt = Self::build_system_prompt(schema, prompt);
 
@@ -167,25 +164,37 @@ mod tests {
     #[test]
     fn extract_json_block_plain_json() {
         let input = r#"{"name": "test"}"#;
-        assert_eq!(LlmExtractor::extract_json_block(input), r#"{"name": "test"}"#);
+        assert_eq!(
+            LlmExtractor::extract_json_block(input),
+            r#"{"name": "test"}"#
+        );
     }
 
     #[test]
     fn extract_json_block_with_json_fence() {
         let input = "```json\n{\"name\": \"test\"}\n```";
-        assert_eq!(LlmExtractor::extract_json_block(input), r#"{"name": "test"}"#);
+        assert_eq!(
+            LlmExtractor::extract_json_block(input),
+            r#"{"name": "test"}"#
+        );
     }
 
     #[test]
     fn extract_json_block_with_plain_fence() {
         let input = "```\n{\"items\": [1, 2, 3]}\n```";
-        assert_eq!(LlmExtractor::extract_json_block(input), r#"{"items": [1, 2, 3]}"#);
+        assert_eq!(
+            LlmExtractor::extract_json_block(input),
+            r#"{"items": [1, 2, 3]}"#
+        );
     }
 
     #[test]
     fn extract_json_block_with_surrounding_text() {
         let input = "Here is the data:\n```json\n{\"key\": \"value\"}\n```\nDone.";
-        assert_eq!(LlmExtractor::extract_json_block(input), r#"{"key": "value"}"#);
+        assert_eq!(
+            LlmExtractor::extract_json_block(input),
+            r#"{"key": "value"}"#
+        );
     }
 
     #[test]

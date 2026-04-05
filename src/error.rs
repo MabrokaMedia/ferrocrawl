@@ -86,11 +86,17 @@ impl IntoResponse for AppError {
             }
             AppError::Config(msg) => {
                 tracing::error!(error = %msg, "config.error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal configuration error".into())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal configuration error".into(),
+                )
             }
             AppError::Internal(msg) => {
                 tracing::error!(error = %msg, "internal.error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".into())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".into(),
+                )
             }
         };
 
@@ -130,10 +136,7 @@ mod tests {
             AppError::InvalidUrl("bad".into()).to_string(),
             "Invalid URL: bad"
         );
-        assert_eq!(
-            AppError::Timeout.to_string(),
-            "Timeout fetching URL"
-        );
+        assert_eq!(AppError::Timeout.to_string(), "Timeout fetching URL");
         assert_eq!(
             AppError::ContentTooLarge(5000).to_string(),
             "Content too large: 5000 bytes"
@@ -212,7 +215,9 @@ mod tests {
             StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
-            AppError::ExtractionError("x".into()).into_response().status(),
+            AppError::ExtractionError("x".into())
+                .into_response()
+                .status(),
             StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(
