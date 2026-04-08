@@ -99,8 +99,14 @@ pub struct FallbackConfig {
 impl std::fmt::Debug for FallbackConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FallbackConfig")
-            .field("crawlbase_token", &self.crawlbase_token.as_ref().map(|_| "[REDACTED]"))
-            .field("brightdata_api_key", &self.brightdata_api_key.as_ref().map(|_| "[REDACTED]"))
+            .field(
+                "crawlbase_token",
+                &self.crawlbase_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field(
+                "brightdata_api_key",
+                &self.brightdata_api_key.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("brightdata_zone", &self.brightdata_zone)
             .finish()
     }
