@@ -5,13 +5,14 @@ use reqwest::Client;
 use url::Url;
 
 use super::{ContentCleaner, ScrapeResult};
-use crate::config::Config;
+use crate::config::{Config, FallbackConfig};
 use crate::error::AppError;
 
 pub struct StaticScraper {
     client: Client,
     cache: Cache<String, ScrapeResult>,
     max_body_size: usize,
+    fallback: FallbackConfig,
 }
 
 impl StaticScraper {
@@ -36,6 +37,7 @@ impl StaticScraper {
             client,
             cache,
             max_body_size: config.scraper.max_body_size,
+            fallback: config.fallback.clone(),
         })
     }
 
@@ -70,43 +72,18 @@ impl StaticScraper {
             return Ok(cached);
         }
 
-        let start = Instant::now();
-
-        // Fetch
-        let response = self
-            .client
-            .get(url)
-            .header(
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .header("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
-            .send()
-            .await?;
-
-        let status_code = response.status().as_u16();
-        let content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string());
-
-        // Check status
-        if status_code == 403 || status_code == 429 {
-            return Err(AppError::Blocked);
-        }
-
-        // Check content length before downloading body
-        if let Some(len) = response.content_length() {
-            if len as usize > self.max_body_size {
-                return Err(AppError::ContentTooLarge(len as usize));
+        // Try direct fetch first, then fallback providers on block/failure
+        let result = match self.fetch_direct(url).await {
+            Ok(html) => html,
+            Err(AppError::Blocked) | Err(AppError::FetchError(_)) => {
+                tracing::info!(url, "scraper.direct_blocked, trying fallback providers");
+                self.fetch_with_fallback(url).await?
             }
-        }
+            Err(e) => return Err(e),
+        };
 
-        let raw_html = response
-            .text()
-            .await
-            .map_err(|e| AppError::FetchError(format!("Failed to read body: {e}")))?;
+        let start_process = Instant::now();
+        let (status_code, content_type, raw_html) = result;
 
         if raw_html.len() > self.max_body_size {
             return Err(AppError::ContentTooLarge(raw_html.len()));
@@ -120,7 +97,7 @@ impl StaticScraper {
         let markdown = htmd::convert(&cleaned_html).unwrap_or_else(|_| cleaned_html.clone());
         let markdown = Self::normalize_whitespace(&markdown);
 
-        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let elapsed_ms = start_process.elapsed().as_millis() as u64;
 
         let result = ScrapeResult {
             url: url.to_string(),
@@ -139,6 +116,151 @@ impl StaticScraper {
         self.cache.insert(cache_key, result.clone()).await;
 
         Ok(result)
+    }
+
+    /// Direct HTTP fetch (free, no proxy)
+    async fn fetch_direct(&self, url: &str) -> Result<(u16, Option<String>, String), AppError> {
+        let response = self
+            .client
+            .get(url)
+            .header(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
+            .header("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
+            .send()
+            .await?;
+
+        let status_code = response.status().as_u16();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        if status_code == 403 || status_code == 429 {
+            return Err(AppError::Blocked);
+        }
+
+        if let Some(len) = response.content_length() {
+            if len as usize > self.max_body_size {
+                return Err(AppError::ContentTooLarge(len as usize));
+            }
+        }
+
+        let raw_html = response
+            .text()
+            .await
+            .map_err(|e| AppError::FetchError(format!("Failed to read body: {e}")))?;
+
+        Ok((status_code, content_type, raw_html))
+    }
+
+    /// Fallback chain: Crawlbase → Bright Data
+    async fn fetch_with_fallback(
+        &self,
+        url: &str,
+    ) -> Result<(u16, Option<String>, String), AppError> {
+        // Try Crawlbase first (cheapest: $0.003/req with JS rendering)
+        if let Some(token) = &self.fallback.crawlbase_token {
+            match self.fetch_crawlbase(url, token).await {
+                Ok(result) => {
+                    tracing::info!(url, provider = "crawlbase", "scraper.fallback_success");
+                    return Ok(result);
+                }
+                Err(e) => {
+                    tracing::warn!(url, provider = "crawlbase", error = %e, "scraper.fallback_failed");
+                }
+            }
+        }
+
+        // Try Bright Data Web Unlocker (strongest anti-bot)
+        if let Some(api_key) = &self.fallback.brightdata_api_key {
+            match self.fetch_brightdata(url, api_key).await {
+                Ok(result) => {
+                    tracing::info!(url, provider = "brightdata", "scraper.fallback_success");
+                    return Ok(result);
+                }
+                Err(e) => {
+                    tracing::warn!(url, provider = "brightdata", error = %e, "scraper.fallback_failed");
+                }
+            }
+        }
+
+        Err(AppError::Blocked)
+    }
+
+    /// Crawlbase: GET https://api.crawlbase.com/?token=TOKEN&url=URL&render=true
+    async fn fetch_crawlbase(
+        &self,
+        url: &str,
+        token: &str,
+    ) -> Result<(u16, Option<String>, String), AppError> {
+        let encoded_url = urlencoding::encode(url);
+        let api_url = format!(
+            "https://api.crawlbase.com/?token={token}&url={encoded_url}&render=true&country=FR"
+        );
+
+        let response = self
+            .client
+            .get(&api_url)
+            .timeout(Duration::from_secs(25))
+            .send()
+            .await
+            .map_err(|e| AppError::FetchError(format!("Crawlbase request failed: {e}")))?;
+
+        let status = response.status().as_u16();
+        if status != 200 {
+            return Err(AppError::FetchError(format!(
+                "Crawlbase returned status {status}"
+            )));
+        }
+
+        let raw_html = response
+            .text()
+            .await
+            .map_err(|e| AppError::FetchError(format!("Crawlbase body read failed: {e}")))?;
+
+        Ok((200, Some("text/html".into()), raw_html))
+    }
+
+    /// Bright Data Web Unlocker: POST https://api.brightdata.com/request
+    async fn fetch_brightdata(
+        &self,
+        url: &str,
+        api_key: &str,
+    ) -> Result<(u16, Option<String>, String), AppError> {
+        let body = serde_json::json!({
+            "zone": &self.fallback.brightdata_zone,
+            "url": url,
+            "format": "raw"
+        });
+
+        let response = self
+            .client
+            .post("https://api.brightdata.com/request")
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("Content-Type", "application/json")
+            .timeout(Duration::from_secs(25))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| AppError::FetchError(format!("Bright Data request failed: {e}")))?;
+
+        let status = response.status().as_u16();
+        if status != 200 {
+            let err_body = response.text().await.unwrap_or_default();
+            return Err(AppError::FetchError(format!(
+                "Bright Data returned status {status}: {err_body}"
+            )));
+        }
+
+        let raw_html = response
+            .text()
+            .await
+            .map_err(|e| AppError::FetchError(format!("Bright Data body read failed: {e}")))?;
+
+        Ok((200, Some("text/html".into()), raw_html))
     }
 
     fn is_private_host(host: &str) -> bool {
@@ -287,6 +409,11 @@ mod tests {
                 model: "test".into(),
             },
             auth: crate::config::AuthConfig { api_keys: vec![] },
+            fallback: crate::config::FallbackConfig {
+                crawlbase_token: None,
+                brightdata_api_key: None,
+                brightdata_zone: "web_unlocker1".into(),
+            },
         };
         StaticScraper::new(&config).unwrap()
     }

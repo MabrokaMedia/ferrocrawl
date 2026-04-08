@@ -10,6 +10,7 @@ pub struct Config {
     pub cache: CacheConfig,
     pub anthropic: AnthropicConfig,
     pub auth: AuthConfig,
+    pub fallback: FallbackConfig,
 }
 
 impl std::fmt::Debug for Config {
@@ -20,6 +21,7 @@ impl std::fmt::Debug for Config {
             .field("cache", &self.cache)
             .field("anthropic", &self.anthropic)
             .field("auth", &self.auth)
+            .field("fallback", &self.fallback)
             .finish()
     }
 }
@@ -83,6 +85,23 @@ impl std::fmt::Debug for AnthropicConfig {
         f.debug_struct("AnthropicConfig")
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
             .field("model", &self.model)
+            .finish()
+    }
+}
+
+#[derive(Clone)]
+pub struct FallbackConfig {
+    pub crawlbase_token: Option<String>,
+    pub brightdata_api_key: Option<String>,
+    pub brightdata_zone: String,
+}
+
+impl std::fmt::Debug for FallbackConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FallbackConfig")
+            .field("crawlbase_token", &self.crawlbase_token.as_ref().map(|_| "[REDACTED]"))
+            .field("brightdata_api_key", &self.brightdata_api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("brightdata_zone", &self.brightdata_zone)
             .finish()
     }
 }
@@ -161,6 +180,11 @@ impl Config {
                     })
                     .unwrap_or_default(),
             },
+            fallback: FallbackConfig {
+                crawlbase_token: env::var("CRAWLBASE_TOKEN").ok().filter(|s| !s.is_empty()),
+                brightdata_api_key: env::var("BRIGHTDATA_API_KEY").ok().filter(|s| !s.is_empty()),
+                brightdata_zone: env::var("BRIGHTDATA_ZONE").unwrap_or_else(|_| "web_unlocker1".into()),
+            },
         })
     }
 }
@@ -212,6 +236,8 @@ mod tests {
         env::remove_var("FERROCRAWL_HOST");
         env::remove_var("FERROCRAWL_PORT");
         env::remove_var("FERROCRAWL_API_KEYS");
+        env::remove_var("CRAWLBASE_TOKEN");
+        env::remove_var("BRIGHTDATA_API_KEY");
 
         let config = Config::from_env().unwrap();
         assert_eq!(config.server.host, "0.0.0.0");
@@ -221,6 +247,8 @@ mod tests {
         assert_eq!(config.scraper.max_body_size, 10 * 1024 * 1024);
         assert_eq!(config.scraper.max_concurrent, 50);
         assert!(!config.auth.enabled());
+        assert!(config.fallback.crawlbase_token.is_none());
+        assert!(config.fallback.brightdata_api_key.is_none());
     }
 
     #[test]

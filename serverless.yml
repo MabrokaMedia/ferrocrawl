@@ -21,6 +21,10 @@ provider:
     FERROCRAWL_MAX_BODY_SIZE: "5242880"
     FERROCRAWL_CACHE_TTL: "300"
     FERROCRAWL_CACHE_MAX: "500"
+    # Fallback scraping providers (activated on 403/blocked)
+    CRAWLBASE_TOKEN: ${ssm:/ferrocrawl/${self:provider.stage}/crawlbase-token, ''}
+    BRIGHTDATA_API_KEY: ${ssm:/ferrocrawl/${self:provider.stage}/brightdata-api-key, ''}
+    BRIGHTDATA_ZONE: ${ssm:/ferrocrawl/${self:provider.stage}/brightdata-zone, 'web_unlocker1'}
   httpApi:
     cors:
       allowedOrigins:
