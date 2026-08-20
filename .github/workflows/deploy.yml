@@ -20,6 +20,22 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Pinned deliberately — `stable` is a moving target, not a version.
+  # rustc 1.98.0 (2026-08-18) started passing `-Wl,--fix-cortex-a53-843419`
+  # when it links an aarch64 cdylib. zig 0.13.0, the cross-linker
+  # cargo-lambda drives, rejects that flag outright ("error: unsupported
+  # linker arg") and cargo-zigbuild 0.20.1 does not filter it, so
+  # `crc-fast` — a cdylib reached through aws-smithy-checksums — fails to
+  # compile and takes every Lambda binary in the build with it.
+  #
+  # This is not theoretical: on 2026-08-20 the platform repo shipped at
+  # 15:12 and failed at 17:36 on an identical lockfile, because a
+  # cold-booted runner resolved `stable` to the new compiler. Warm
+  # runners kept working, so it looked intermittent.
+  #
+  # Unpin only with a cargo-lambda/zig bump that filters the flag, and
+  # prove it on a cold runner. Mirrors MabrokaMedia/davoxi-backend#777.
+  RUST_TOOLCHAIN: "1.97.1"
   STAGE: ${{ github.event.inputs.stage || 'prod' }}
   AWS_REGION: us-east-1
 
@@ -32,6 +48,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -59,6 +77,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
 
       - name: Install cargo-lambda
         run: pip3 install cargo-lambda
